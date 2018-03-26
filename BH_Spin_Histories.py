@@ -26,6 +26,8 @@ N_proc = 256
 #   Extracting data
 #========================================================================================
 indexes = np.loadtxt('%s%s/analysis/BH_IDs.txt'%(DataFolder,Simulation))[:,[0,1]]
+#Creating (if not existent) folder with postprocessed data
+os.system('mkdir %s%s/analysis/spins'%(DataFolder,Simulation))
 
 os.system('mv %s%s/analysis/spins/* %s%s/analysis/spinsbk/'%(DataFolder,Simulation,DataFolder,Simulation))
 for i in xrange(N_proc):
