@@ -754,7 +754,7 @@ class black_hole_sim(object):
             mass = self.Mbh(t)*self.units['M']/E8MSUN
 
             time_acc = 3e6 * abs(a)**(7/8.) * mass**(11/8.) * lambd**(-3/4.) *v2v1**(-7/8.) * self.alpha**(-3/2.)*SECPERYEAR/self.units['T']*20
-            Mself = 2.13e5 * self.rad_eff**(-5/27.) * mass**(23/27.) * lambd**(5/27.) * self.alpha**(-2/17.) * SOLARMASS/self.units['M']
+            Mself = (1-self.rad_eff)*2.13e5 * self.rad_eff**(-5/27.) * mass**(23/27.) * lambd**(5/27.) * self.alpha**(-2/17.) * SOLARMASS/self.units['M']
             Rself = 1.5e3 * self.rad_eff**(8/27.) * mass**(-26/27.) * lambd**(-8/27.) * self.alpha**(14/27.)
             Rwarp = 3.6e3 * abs(a)**(5/8.) * mass**(1/8.) * lambd**(-1/4.) * (v2v1/85.)**(-5/8.) * self.alpha**(-1/2.)
 
