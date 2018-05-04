@@ -109,6 +109,9 @@ def vector_generator( lvec, k ):
     y = np.array([SinTheta*np.cos(Phi), SinTheta*np.sin(Phi), CosTheta])
     return rot_matrix(lvec, y)
 
+def list2array(lista):
+    return np.array(list(chain.from_iterable(lista)))
+
   
 #Function to load coordinates and potential from a snapshot
 def snapshot_reader( datafolder, simulation, snap, snapbase = 'snapshot', parttype = 1, BH_offset = False, units = unitsstd ):
@@ -336,20 +339,21 @@ class black_hole_sim(object):
     kargs : extra arguments
     """
     def __init__( self, simulation, snapbase, n_snap, datafolder, resultsfolder, center = [0,0,0], comoving = False, units = unitsstd, kargs={} ):
-	    self.simulation = simulation
-	    self.snapbase = snapbase
-	    self.n_snap = n_snap
-	    self.datafolder = datafolder
-	    self.resultsfolder = resultsfolder
-	
-	    self.comoving = comoving
-	    self.center = np.array(center)	
-	    self.units = units
-	    self.kargs = kargs
-	
-	    #Units
-	    self.GC = GC*self.units['M']*self.units['T']**2/self.units['L']**3
-	    self.Vf = self.units['V']*self.units['T']/self.units['L']
+        self.simulation = simulation
+        self.snapbase = snapbase
+        self.n_snap = n_snap
+        self.datafolder = datafolder
+        self.resultsfolder = resultsfolder
+        
+        self.comoving = comoving
+        self.center = np.array(center)	
+        self.units = units
+        self.kargs = kargs
+        self.MTC = False
+        
+        #Units
+        self.GC = GC*self.units['M']*self.units['T']**2/self.units['L']**3
+        self.Vf = self.units['V']*self.units['T']/self.units['L']
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
 #       ORBITAL EVOLUTION
@@ -608,7 +612,7 @@ class black_hole_sim(object):
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def loading_spin( self, BH_id ):
         filename = '%s/%s/analysis/spins/BH_%d.txt'%( self.datafolder, self.simulation, BH_id )
-	    #Initializing position and velocity
+        #Initializing BH info
         data = np.loadtxt( filename )
         try:
             data.shape[1]
@@ -616,7 +620,7 @@ class black_hole_sim(object):
             print 'This BH file has only one entry. Not enough for spin evolution model.'
             return 0
         
-	    #Sortering data in time
+        #Sortering data in time
         data = data[ np.argsort(data[:,0]) ]
         self.t = physical_time(data[:,0])
         self.a = data[:,1]
@@ -633,8 +637,142 @@ class black_hole_sim(object):
         #Calculating time discontinuities
         self.deltatime = abs(self.t[:-1] - self.t[1:])
         self.time_disc = [self.t[:-1][ self.deltatime>0.5 ], self.t[1:][ self.deltatime>0.5 ]]
+        
+        if self.MTC:
+            T1 = self.t[-1]
+            T0 = BH.Tmerger[0]
+            
+            #Reseting variables
+            self.t = []
+            self.a = []
+            self.lgas = []
+            self.dir_a = []
+            self.mbh = []
+            self.mbh_dot = []
+            self.mode = []
+            mask_t = (physical_time(data[:,0])<=T1)&(physical_time(data[:,0])>T0)
+            data = data[mask_t]
+            self.t.append(physical_time(data[:,0]))
+            self.a.append(data[:,1])
+            self.lgas.append(data[:,[7,8,9]])
+            self.dir_a.append(data[:,[4,5,6]])
+            self.mbh.append(data[:,2])
+            self.mbh_dot.append(data[:,3]*self.m_dot_eddignton( np.array(data[:,2]), rad_eff = 0.2, a = self.a ))
+            self.mode.append(data[:,-1].astype(int))
+            self.t = np.array(self.t)
+            self.a = np.array(self.a)
+            self.lgas = np.array(self.lgas)[0]
+            self.dir_a = np.array(self.dir_a)[0]
+            self.mbh = np.array(self.mbh)
+            self.mbh_dot = np.array(self.mbh_dot)
+            self.mode = np.array(self.mode)
+    
+            for t, idi, ic in zip( self.Tmerger, self.IDimerger, np.arange(len(self.Tmerger)) ):
+                T1 = T0
+                T0 = t
+                filename = '%s/%s/analysis/spins/BH_%d.txt'%( self.datafolder, self.simulation, idi )
+                #Initializing BH info
+                data = np.loadtxt( filename )
+                try:
+                    data.shape[1]
+                    data = data[ np.argsort(data[:,0]) ]
+                except:
+                    print 'This BH file has only one entry. Not enough for spin evolution model.'
+                    return 0
+        
+                #masking time
+                mask_t = (physical_time(data[:,0])<=T1)&(physical_time(data[:,0])>T0)
+                #print "%1.3f\t%1.3f\t%1.3f\t%1.3f\t%d\t%d"%(physical_time(data[0,0]), physical_time(data[-1,0]), T1, T0, idi, sum(mask_t))
+                if sum(mask_t)>0:
+                    data = data[mask_t]
+                    self.t = np.append(self.t, physical_time(data[:,0]))
+                    self.a = np.append(self.a, data[:,1])
+                    self.lgas = np.append(self.lgas, data[:,[7,8,9]], axis=0)
+                    self.dir_a = np.append(self.dir_a, data[:,[4,5,6]], axis=0)
+                    self.mbh = np.append(self.mbh, data[:,2])
+                    self.mbh_dot = np.append(self.mbh_dot, data[:,3]*self.m_dot_eddignton( np.array(data[:,2]), rad_eff = 0.2, a = self.a ))
+                    self.mode = np.append(self.mode, data[:,-1].astype(int))
+                                    
+        #Sortering in time
+        mask_t_final = np.argsort(self.t)
+        self.t = self.t[mask_t_final]
+        self.a = self.a[mask_t_final]
+        self.lgas = self.lgas[mask_t_final]
+        self.dir_a = self.dir_a[mask_t_final]
+        self.mbh = self.mbh[mask_t_final]
+        self.mbh_dot = self.mbh_dot[mask_t_final]
+        self.mode = self.mode[mask_t_final]
 
         return len(data[:,0])
+
+
+    def merger_tree_correction( self, BH_id ):
+        #Activating flag with merger_tree_correction
+        self.MTC = True
+        filename_tree = '%s/%s/analysis/BH_Mergers.txt'%( self.datafolder, self.simulation )
+        filename_ID = '%s/%s/analysis/BH_IDs.txt'%( self.datafolder, self.simulation )
+	    #Loading
+        try:
+            data_tree = np.loadtxt( filename_tree )
+            data_ID = np.loadtxt( filename_ID )
+        except:
+            print 'File not found.'
+            return 0
+        
+	    #Sortering data in time
+        ID_sim = data_ID[BH_id,1]
+        #Finding all mergers with current BH
+        data_tree_t = data_tree[ (data_tree[:,1]==ID_sim)|(data_tree[:,3]==ID_sim) ]
+        if data_tree_t.shape[0] < 1:
+            print 'BH did not merger'
+            self.MTC = False
+            return 0
+        
+        #Sortering in time
+        data_tree_t = data_tree_t[np.argsort(data_tree_t[:,0])]
+
+        i_end = data_tree_t.shape[0] - 1
+        self.Tmerger = []
+        self.IDmerger = []
+        self.IDimerger = []
+        self.M1merger = []
+        self.M2merger = []
+        while True:
+            if data_tree_t[i_end,1] == ID_sim:
+                i1 = 1
+                i2 = 3
+            else:
+                i1 = 3
+                i2 = 1
+            
+            self.Tmerger.append( physical_time(data_tree_t[i_end,0]) )
+            if data_tree_t[i_end,i1+1]>data_tree_t[i_end,i2+1]:
+                self.IDmerger.append( data_tree_t[i_end,i2] )
+                self.IDimerger.append( int(BH_id) )
+                self.M1merger.append( data_tree_t[i_end,i1+1] )
+                self.M2merger.append( data_tree_t[i_end,i2+1] )
+                i_end = i_end - 1
+            else:
+                ID_sim = data_tree_t[i_end,i2]
+                BH_id = data_ID[ data_ID[:,1] == int(ID_sim), 0 ][0]
+                self.IDmerger.append( ID_sim )
+                self.IDimerger.append( int(BH_id) )
+                self.M1merger.append( data_tree_t[i_end,i2+1] )
+                self.M2merger.append( data_tree_t[i_end,i1+1] )
+                
+                #Finding all mergers with current BH for new branch
+                data_tree_t = data_tree[ (data_tree[:,1]==ID_sim)|(data_tree[:,3]==ID_sim) ]
+                #Sortering in time
+                data_tree_t = data_tree_t[np.argsort(data_tree_t[:,0])]
+                
+                i_end = data_tree_t.shape[0] - 2
+                
+            if i_end == -1:
+                break
+        self.Tmerger.append(0)
+        self.IDimerger.append( self.IDimerger[-1] )
+    
+        return 1
 
         
     def radiative_efficiency( self, a ):
@@ -672,7 +810,7 @@ class black_hole_sim(object):
         return a
 
             
-    def spin_evolution( self, mode='continuous', rad_eff = 0.1, alpha = 0.1, a0 = 0.5, kparam = 0, Nmax = 50000 ):
+    def spin_evolution( self, mode='continuous', rad_eff = 0.1, alpha = 0.1, a0 = 0.5, kparam = 0, Nmax = 200 ):
         """
         Spin evolution function
 
@@ -755,6 +893,7 @@ class black_hole_sim(object):
 
             time_acc = 3e6 * abs(a)**(7/8.) * mass**(11/8.) * lambd**(-3/4.) *v2v1**(-7/8.) * self.alpha**(-3/2.)*SECPERYEAR/self.units['T']*20
             Mself = (1-self.rad_eff)*2.13e5 * self.rad_eff**(-5/27.) * mass**(23/27.) * lambd**(5/27.) * self.alpha**(-2/17.) * SOLARMASS/self.units['M']
+            print Mself, Mself/(1-self.rad_eff), t, self.t[-1]
             Rself = 1.5e3 * self.rad_eff**(8/27.) * mass**(-26/27.) * lambd**(-8/27.) * self.alpha**(14/27.)
             Rwarp = 3.6e3 * abs(a)**(5/8.) * mass**(1/8.) * lambd**(-1/4.) * (v2v1/85.)**(-5/8.) * self.alpha**(-1/2.)
 
