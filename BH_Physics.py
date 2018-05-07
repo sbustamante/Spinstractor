@@ -667,7 +667,7 @@ class black_hole_sim(object):
             self.mbh_dot = np.array(self.mbh_dot)
             self.mode = np.array(self.mode)
     
-            for t, idi, ic in zip( self.Tmerger, self.IDimerger, np.arange(len(self.Tmerger)) ):
+            for t, idi, ic in zip( self.Tmerger[1:], self.IDimerger[:-1], np.arange(len(self.Tmerger[1:])) ):
                 T1 = T0
                 T0 = t
                 filename = '%s/%s/analysis/spins/BH_%d.txt'%( self.datafolder, self.simulation, idi )
@@ -702,6 +702,23 @@ class black_hole_sim(object):
         self.mbh = self.mbh[mask_t_final]
         self.mbh_dot = self.mbh_dot[mask_t_final]
         self.mode = self.mode[mask_t_final]
+        
+        #Interpolating
+        self.A = interp1d( self.t, self.a, bounds_error = False, kind='nearest' )
+        self.Mbh = interp1d( self.t, self.mbh, bounds_error = False, kind='nearest' )
+        self.Mbh_dot = interp1d( self.t, self.mbh_dot, bounds_error = False, kind='nearest' )
+        #Interpolating Lgas direction
+        self.Lgas = lambda t: np.array([
+            interp1d( self.t, self.lgas[:,0], kind='nearest' )(t), 
+            interp1d( self.t, self.lgas[:,1], kind='nearest' )(t), 
+            interp1d( self.t, self.lgas[:,2], kind='nearest' )(t)])
+
+        #Interpolating spin direction
+        self.SpinDir = lambda t: np.array([
+            interp1d( self.t, self.dir_a[:,0], kind='linear' )(t), 
+            interp1d( self.t, self.dir_a[:,1], kind='linear' )(t), 
+            interp1d( self.t, self.dir_a[:,2], kind='linear' )(t)])
+        
 
         return len(data[:,0])
 
@@ -733,6 +750,7 @@ class black_hole_sim(object):
 
         i_end = data_tree_t.shape[0] - 1
         self.Tmerger = []
+        self.Amerger = []
         self.IDmerger = []
         self.IDimerger = []
         self.M1merger = []
@@ -746,6 +764,7 @@ class black_hole_sim(object):
                 i2 = 1
             
             self.Tmerger.append( physical_time(data_tree_t[i_end,0]) )
+            self.Amerger.append( data_tree_t[i_end,0] )
             if data_tree_t[i_end,i1+1]>data_tree_t[i_end,i2+1]:
                 self.IDmerger.append( data_tree_t[i_end,i2] )
                 self.IDimerger.append( int(BH_id) )
@@ -770,6 +789,7 @@ class black_hole_sim(object):
             if i_end == -1:
                 break
         self.Tmerger.append(0)
+        self.Amerger.append(1)
         self.IDimerger.append( self.IDimerger[-1] )
     
         return 1
