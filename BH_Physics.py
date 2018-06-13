@@ -673,12 +673,8 @@ class black_hole_sim(object):
                 filename = '%s/%s/analysis/spins/BH_%d.txt'%( self.datafolder, self.simulation, idi )
                 #Initializing BH info
                 data = np.loadtxt( filename )
-                try:
-                    data.shape[1]
-                    data = data[ np.argsort(data[:,0]) ]
-                except:
-                    print 'This BH file has only one entry. Not enough for spin evolution model.'
-                    return 0
+                if len(data.shape) == 1:
+                    data = np.array( [data,] )
         
                 #masking time
                 mask_t = (physical_time(data[:,0])<=T1)&(physical_time(data[:,0])>T0)
@@ -773,18 +769,28 @@ class black_hole_sim(object):
                 i_end = i_end - 1
             else:
                 ID_sim = data_tree_t[i_end,i2]
-                BH_id = data_ID[ data_ID[:,1] == int(ID_sim), 0 ][0]
-                self.IDmerger.append( ID_sim )
-                self.IDimerger.append( int(BH_id) )
-                self.M1merger.append( data_tree_t[i_end,i2+1] )
-                self.M2merger.append( data_tree_t[i_end,i1+1] )
+                try:
+                    BH_id = data_ID[ data_ID[:,1] == int(ID_sim), 0 ][0]
+                    self.IDmerger.append( ID_sim )
+                    self.IDimerger.append( int(BH_id) )
+                    self.M1merger.append( data_tree_t[i_end,i2+1] )
+                    self.M2merger.append( data_tree_t[i_end,i1+1] )
                 
-                #Finding all mergers with current BH for new branch
-                data_tree_t = data_tree[ (data_tree[:,1]==ID_sim)|(data_tree[:,3]==ID_sim) ]
-                #Sortering in time
-                data_tree_t = data_tree_t[np.argsort(data_tree_t[:,0])]
+                    #Finding all mergers with current BH for new branch
+                    data_tree_t = data_tree[ (data_tree[:,1]==ID_sim)|(data_tree[:,3]==ID_sim) ]
+                    #Sortering in time
+                    data_tree_t = data_tree_t[np.argsort(data_tree_t[:,0])]
                 
-                i_end = data_tree_t.shape[0] - 2
+                    i_end = data_tree_t.shape[0] - 2
+                except:
+                    ID_sim = data_tree_t[i_end,i1]
+                    BH_id = data_ID[ data_ID[:,1] == int(ID_sim), 0 ][0]
+                    self.IDmerger.append( data_tree_t[i_end,i2] )
+                    self.IDimerger.append( int(BH_id) )
+                    self.M1merger.append( data_tree_t[i_end,i1+1] )
+                    self.M2merger.append( data_tree_t[i_end,i2+1] )
+                    i_end = i_end - 1
+                
                 
             if i_end == -1:
                 break

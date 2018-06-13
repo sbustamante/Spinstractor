@@ -15,11 +15,11 @@ plt.close('all')
 #   PARAMETERS
 #========================================================================================
 #Data folder
-DataFolder = '/home/bustamsn/bustamsn/cosmological_BH/Sims512/'
+DataFolder = '/home/bustamsn/bustamsn/cosmological_BH/Sims256/'
 #Simulation
-Simulation = 'cosmobh05'
+Simulation = 'cosmobh03'
 #Number of chunks (same number of used processors)
-N_proc = 512
+N_proc = 256
 
 #========================================================================================
 #   Extracting data
@@ -28,7 +28,6 @@ indexes = np.loadtxt('%s%s/analysis/BH_IDs.txt'%(DataFolder,Simulation))[:,[0,1]
 #Creating (if not existent) folder with postprocessed data
 os.system('mkdir %s%s/analysis/spins'%(DataFolder,Simulation))
 
-os.system('mv %s%s/analysis/spins/* %s%s/analysis/spinsbk/'%(DataFolder,Simulation,DataFolder,Simulation))
 for i in xrange(N_proc):
     print 'In file', i
     #Loading data
@@ -41,18 +40,17 @@ for i in xrange(N_proc):
         #Saving current BH
         data_bh = data[data[:,0] == i_bh]
         data_bh = data_bh[ np.unique(data_bh[:,1],return_index=True)[1] ]
-        if data_bh.shape[0] > 0:
-            f= open('%s%s/analysis/spins/BHt_%d.txt'%(DataFolder,Simulation,i_fl), 'a')
-            np.savetxt(f, data_bh[:,1:], fmt='%e %e %e %e %e %e %e %e %e %e %d')
-            f.close()
+        #if data_bh.shape[0] > 0:
+        f= open('%s%s/analysis/spins/BHt_%d.txt'%(DataFolder,Simulation,i_fl), 'a')
+        np.savetxt(f, data_bh[:,1:], fmt='%e %e %e %e %e %e %e %e %e %e %d')
+        f.close()
 
 #Sortering data
 for i_bh in indexes[:,0].astype(int):
-    try:
-        data = np.loadtxt('%s%s/analysis/spins/BHt_%d.txt'%(DataFolder,Simulation,i_bh))
-        data = data[ np.unique(data[:,0],return_index=True)[1] ]
-        data = data[np.argsort(data[:,0])]
-        np.savetxt('%s%s/analysis/spins/BH_%d.txt'%(DataFolder,Simulation,i_bh), data, fmt='%e %e %e %e %e %e %e %e %e %e %d')
-    except:
-        print 'File not found!'
+    data = np.loadtxt('%s%s/analysis/spins/BHt_%d.txt'%(DataFolder,Simulation,i_bh))
+    if len(data.shape) == 1:
+        data = np.array([data,])
+    data = data[ np.unique(data[:,0],return_index=True)[1] ]
+    data = data[np.argsort(data[:,0])]
+    np.savetxt('%s%s/analysis/spins/BH_%d.txt'%(DataFolder,Simulation,i_bh), data, fmt='%e %e %e %e %e %e %e %e %e %e %d')
  
