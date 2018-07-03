@@ -15,7 +15,7 @@ plt.close('all')
 #Data folder
 DataFolder = '/home/bustamsn/bustamsn/cosmological_BH/Sims512/'
 #Simulation
-Simulation = 'cosmobh05'
+Simulation = 'cosmobh01'
 #Number of chunks (same number of used processors)
 N_proc = 256
 #Concatenate files
@@ -34,8 +34,11 @@ if conc:
         #Loading data
         str_cmd = "sed 's/^[^=]*=/=/' %s%s/output/blackhole_details/blackhole_spin_%d.txt | cut -c 2- > tmp.txt"%(DataFolder,Simulation,i)
         os.system(str_cmd)
-        data = np.loadtxt('tmp.txt')
-        os.system('rm tmp.txt')
+        #Double check
+        str_cmd = "sed 's/^[^=]*=/=/' tmp.txt| sed 's/=//' > tmp2.txt"
+        os.system(str_cmd)
+        data = np.loadtxt('tmp2.txt')
+        os.system('rm tmp.txt tmp2.txt')
         
         #Saving last times
         data = data[np.argsort(data[:,1])[::-1]]
