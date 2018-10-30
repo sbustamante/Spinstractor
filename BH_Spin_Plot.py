@@ -20,10 +20,11 @@ plt.close('all')
 #========================================================================================
 #Data folder
 DataFolder = '/home/bustamsn/bustamsn/cosmological_BH/Sims256/'
+DataFolder = '/home/bustamsn/bustamsn_haswell/Sims512/'
 #Simulation
-Simulation = 'cosmobh03'
+Simulation = 'cosmobh01'
 #Number of chunks (same number of used processors)
-N_proc = 256
+N_proc = 512
 DataResults = '.'
 
 

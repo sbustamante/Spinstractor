@@ -103,6 +103,8 @@ def rot_matrix(x, y):
 #Vector generator
 def vector_generator( lvec, k ):
     lvec = lvec/np.linalg.norm( lvec )
+    if np.isnan(sum(lvec)):
+        lvec = vector_generator( [0.0,0,1.0], 0 )
     Phi = 2*np.pi*np.random.random()
     CosTheta = von_Mises(k = k)
     SinTheta = np.sqrt(1-CosTheta**2)
@@ -630,17 +632,9 @@ class black_hole_sim(object):
         self.mbh_dot = data[:,3]*self.m_dot_eddignton( self.mbh, rad_eff = 0.2, a = self.a )
         self.mode = data[:,-1].astype(int)
     
-        #Calculating mergers
-        self.deltambh = abs(self.mbh[:-1] - self.mbh[1:])/self.mbh[1:]
-        self.time_mergers = self.t[:-1][ self.deltambh>0.05 ]
-
-        #Calculating time discontinuities
-        self.deltatime = abs(self.t[:-1] - self.t[1:])
-        self.time_disc = [self.t[:-1][ self.deltatime>0.5 ], self.t[1:][ self.deltatime>0.5 ]]
-        
         if self.MTC:
             T1 = self.t[-1]
-            T0 = BH.Tmerger[0]
+            T0 = self.Tmerger[0]
             
             #Reseting variables
             self.t = []
@@ -698,6 +692,18 @@ class black_hole_sim(object):
         self.mbh = self.mbh[mask_t_final]
         self.mbh_dot = self.mbh_dot[mask_t_final]
         self.mode = self.mode[mask_t_final]
+        
+        #Calculating mergers
+        self.deltambh = abs(self.mbh[:-1] - self.mbh[1:])/self.mbh[1:]
+        self.time_mergers = self.t[:-1][ self.deltambh>0.05 ]*( 1+0.02*np.random.random() )
+        self.amerger = self.a[1:][ self.deltambh>0.05 ]*( 1+0.1*(1-2*np.random.random()) )
+        self.amerger[self.amerger>1] = 0.9
+        self.deltambh = abs(self.mbh[:-1] - self.mbh[1:])[ self.deltambh>0.05 ]*( 1+0.05*(1-2*np.random.random()) )
+
+        #Calculating time discontinuities
+        self.deltatime = abs(self.t[:-1] - self.t[1:])
+        self.time_disc = [self.t[:-1][ self.deltatime>0.5 ], self.t[1:][ self.deltatime>0.5 ]]
+
         
         #Interpolating
         self.A = interp1d( self.t, self.a, bounds_error = False, kind='nearest' )
@@ -833,6 +839,8 @@ class black_hole_sim(object):
         #Minimum spin that can be resolved
         if abs(a)<0.01:
             a = 0.01
+        if abs(a)>0.998:
+            a = np.sign(a)*0.998
         return a
 
             
@@ -859,15 +867,15 @@ class black_hole_sim(object):
         Mbh_inv = interp1d( self.mbh, self.t, bounds_error = False )
         #Interpolating Lgas direction
         self.Lgas = lambda t: np.array([
-            interp1d( self.t, self.lgas[:,0], kind='nearest' )(t), 
-            interp1d( self.t, self.lgas[:,1], kind='nearest' )(t), 
-            interp1d( self.t, self.lgas[:,2], kind='nearest' )(t)])
+            interp1d( self.t, self.lgas[:,0], kind='nearest', fill_value='extrapolate' )(t), 
+            interp1d( self.t, self.lgas[:,1], kind='nearest', fill_value='extrapolate' )(t), 
+            interp1d( self.t, self.lgas[:,2], kind='nearest', fill_value='extrapolate' )(t)])
 
         #Interpolating spin direction
         self.SpinDir = lambda t: np.array([
-            interp1d( self.t, self.dir_a[:,0], kind='linear' )(t), 
-            interp1d( self.t, self.dir_a[:,1], kind='linear' )(t), 
-            interp1d( self.t, self.dir_a[:,2], kind='linear' )(t)])
+            interp1d( self.t, self.dir_a[:,0], kind='linear', fill_value='extrapolate' )(t), 
+            interp1d( self.t, self.dir_a[:,1], kind='linear', fill_value='extrapolate' )(t), 
+            interp1d( self.t, self.dir_a[:,2], kind='linear', fill_value='extrapolate' )(t)])
 
         #Creating flags for mergers
         flag_mergers = np.zeros( len(self.time_mergers) )
@@ -882,47 +890,74 @@ class black_hole_sim(object):
         Msg = []
         Mwp = []
         mdot = []
+        mbhs = []
         JdJbh = []
         dir_aps = []
         modeps = []
+        costh = []
         t = self.t[0]
         a = a_f(t)
         dir_aps0 = self.SpinDir(t)
         i = 0
         dm = 0
         while t < self.t[-1] and i<Nmax:
+            #Flag Merger
+            Mergerflag = False
             #Checking mergers
             for i_mg in xrange(len(self.time_mergers)):
                 if flag_mergers[i_mg] == 0:
                     if t>=self.time_mergers[i_mg]:
                         t = t + 0.001*self.t[-1]
-                        a = a_f(t)
+                        if mode == 'chaotic':
+                            while True:
+                                if (1-2*np.random.randint(0,2)) == 0:
+                                    a2 = a*np.random.random( )
+                                else:
+                                    a2 = a+(1-a)*np.random.random( )
+                                a2 = (1-2*np.random.randint(0,2))*a2
+                                
+                                a = ((mbh/(self.deltambh[i_mg]+mbh))*a + (self.deltambh[i_mg]/(self.deltambh[i_mg]+mbh))*a2)
+                                if abs(a)<=0.998:
+                                    break
+                        else:
+                            a = self.amerger[i_mg]
+                        dir_aps0 = vector_generator( [0,0,1], k = 0 )
                         flag_mergers[i_mg] = 1
+                        Mergerflag = True
+                        break
 
-            #Checking time discontinuities 
-            for i_tm in xrange(len(self.time_disc[0])):
-                if flag_times[i_tm] == 0:
-                    if t>self.time_disc[0][i_tm]:
-                        t = self.time_disc[1][i_tm] + 0.001*self.t[-1]
-                        a = a_f(t)
-                        flag_times[i_tm] = 1
-
-
+            ##Checking time discontinuities 
+            #for i_tm in xrange(len(self.time_disc[0])):
+                #if flag_times[i_tm] == 0:
+                    #if t>self.time_disc[0][i_tm]:
+                        #t = self.time_disc[1][i_tm] + 0.001*self.t[-1]
+                        #a = a_f(t)
+                        #flag_times[i_tm] = 1
+            
             #Properties at this time
             if rad_eff == -1:
               self.rad_eff = self.radiative_efficiency( a )
+              
+            #Current BH mass
+            if len(mbhs)==0:
+                mbh = self.Mbh(t)
+                cosSpin_Lgas = 0
+            else:
+                if Mergerflag:
+                    mbh = mbhs[-1] + self.deltambh[i_mg]
+                else:
+                    mbh = mbhs[-1] + self.Mbh_dot(t)*(t-tms[-1])*(1-self.rad_eff)*self.m_dot_eddignton( mbh, self.rad_eff )/self.m_dot_eddignton( mbh, 0.1 )
 
-            lambd = self.Mbh_dot(t)/self.m_dot_eddignton( self.Mbh(t), self.rad_eff )
+            lambd = np.min((self.Mbh_dot(t)/self.m_dot_eddignton( mbh, self.rad_eff ),1))
 
             v2v1 = 2*(1 + 7*self.alpha)/(self.alpha**2*(4 + self.alpha**2))
-            mass = self.Mbh(t)*self.units['M']/E8MSUN
+            mass = mbh*self.units['M']/E8MSUN
 
             time_acc = 3e6 * abs(a)**(7/8.) * mass**(11/8.) * lambd**(-3/4.) *v2v1**(-7/8.) * self.alpha**(-3/2.)*SECPERYEAR/self.units['T']*20
             Mself = (1-self.rad_eff)*2.13e5 * self.rad_eff**(-5/27.) * mass**(23/27.) * lambd**(5/27.) * self.alpha**(-2/17.) * SOLARMASS/self.units['M']
-            print Mself, Mself/(1-self.rad_eff), t, self.t[-1]
+            #print Mself, Mself/(1-self.rad_eff), t, self.t[-1]
             Rself = 1.5e3 * self.rad_eff**(8/27.) * mass**(-26/27.) * lambd**(-8/27.) * self.alpha**(14/27.)
             Rwarp = 3.6e3 * abs(a)**(5/8.) * mass**(1/8.) * lambd**(-1/4.) * (v2v1/85.)**(-5/8.) * self.alpha**(-1/2.)
-
 
             #Checking alignment
             if mode_global == 'auto':
@@ -930,66 +965,72 @@ class black_hole_sim(object):
                     mode = 'chaotic'
                 else:
                     mode = 'continuous'
+                    
+            i += 1            
+            if mode == 'continuous':
+                modeps.append(0)
+                dm = self.Mbh_dot(t)*time_acc #self.Mbh(t + time_acc)-self.Mbh(t)
+                Jd = mbh*dm*Rwarp**0.5
+                #Current angular momentum direction of gas
+                Lgasi = self.Lgas(t)
 
-            i += 1
-            if lambd >= 1e-5:
-                #Storing properties
-                Rsg.append( Rself )
-                Rwp.append( Rwarp )
-                aps.append( a )
-                tms.append( t )
-                dms.append( dm )
-                mdot.append(self.Mbh_dot(t)/self.m_dot_eddignton( self.Mbh(t), 0.1 ))
-                dir_aps.append( dir_aps0 )
-                Msg.append( Mself )
-                Mwp.append( self.Mbh(t + time_acc)-self.Mbh(t) )
-
-                if mode == 'continuous':
-                    modeps.append(0)
-                    dm = self.Mbh(t + time_acc)-self.Mbh(t)
-                    Jd = self.Mbh(t)*dm*Rwarp**0.5
-                    #Current angular momentum direction of gas
-                    Lgasi = self.Lgas(t)
-
-                if mode == 'chaotic':
-                    modeps.append(1)
-                    dm = Mself
-                    Jd = self.Mbh(t)*dm*Rself**0.5
-                    #Current angular momentum direction of gas
-                    Lgasi = vector_generator( self.Lgas(t), k = kparam )
-
+            if mode == 'chaotic':
+                modeps.append(1)
+                dm = Mself
+                Jd = mbh*dm*Rself**0.5
+                #Current angular momentum direction of gas
+                Lgasi = vector_generator( self.Lgas(t), k = kparam )
+            
+            #Storing properties
+            Rsg.append( Rself )
+            Rwp.append( Rwarp )
+            aps.append( a )
+            tms.append( t )
+            dms.append( dm )
+            mdot.append( lambd )
+            dir_aps.append( dir_aps0 )
+            Msg.append( Mself )
+            Mwp.append( self.Mbh_dot(t)*time_acc )
+            mbhs.append( mbh )                
+            if lambd >= 1e-3 or Mergerflag:
                 #Alignment-antialignment criterion
                 cosSpin_Lgas = np.dot( dir_aps0, Lgasi )
-                Jb = abs(a)*self.Mbh(t)**2
-                #print t, cosSpin_Lgas<-0.5*Jd/Jb, cosSpin_Lgas, Jd, Jb, a, -0.5*Jd/Jb
+                
+                Jb = abs(a)*mbh**2
                 JdJbh.append(-0.5*Jd/Jb)
+            costh.append(cosSpin_Lgas)
+            
+            if lambd >= 1e-3:
                 if cosSpin_Lgas<-0.5*Jd/Jb:
-                    a = self.spin_parameter_evolution( self.Mbh(t), self.Mbh(t) + dm, -abs(a) )
+                    a = self.spin_parameter_evolution( mbh, mbh + dm, -abs(a) )
                 else:
-                    a = self.spin_parameter_evolution( self.Mbh(t), self.Mbh(t) + dm, abs(a) )
+                    a = self.spin_parameter_evolution( mbh, mbh + dm, abs(a) )
 
-                #Spin direction
-                if mode == 'continuous':
-                    dir_aps0 = self.SpinDir(t)
-                if mode == 'chaotic':                
-                    dir_aps0 = Jb*dir_aps0 + Jd*Lgasi
-                    dir_aps0 = dir_aps0/np.linalg.norm(dir_aps0)  
-
+                #Spin direction        
+                temp = dir_aps0
+                dir_aps0 = Jb*dir_aps0 + Jd*Lgasi
+                dir_aps0 = dir_aps0/np.linalg.norm(dir_aps0)  
+                cosSpin_Lgas = np.dot( dir_aps0, Lgasi )
 
                 if self.Mbh(t) != 0:
                     if mode == 'continuous':
-                        t = t + time_acc
+                        t = t + np.min((0.001*self.t[-1],time_acc) )
                     if mode == 'chaotic':
-                        t = Mbh_inv( self.Mbh(t) + Mself )
+                        if (Mbh_inv( self.Mbh(t) + Mself )-t) != 0:
+                            t = t + np.min( (Mbh_inv( self.Mbh(t) + Mself )-t, 0.001*self.t[-1]) )
+                        else:
+                            t = t + 0.001*self.t[-1]
                 else:
-                    t = t+0.001*self.t[-1]
+                    t = t + 0.001*self.t[-1]
 
             else:
-                t = t+0.001*self.t[-1]
+                t = t + 0.001*self.t[-1]
 
         self.modeps = np.array(modeps)
         self.aps = np.array(aps)
         self.mdot = np.array(mdot)
+        self.mbhs = np.array(mbhs)
+        self.costh = np.array(costh)
         self.Rsg = np.array(Rsg)
         self.Rwp = np.array(Rwp)
         self.Msg = np.array(Msg)

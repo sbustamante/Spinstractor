@@ -15,11 +15,11 @@ plt.close('all')
 #   PARAMETERS
 #========================================================================================
 #Data folder
-DataFolder = '/home/bustamsn/bustamsn/cosmological_BH/Sims256/'
+DataFolder = '/home/bustamsn/bustamsn/cosmological_BH/Sims512/'
 #Simulation
-Simulation = 'cosmobh03'
+Simulation = 'cosmobh01'
 #Number of chunks (same number of used processors)
-N_proc = 256
+N_proc = 512
 
 #========================================================================================
 #   Extracting data
@@ -29,12 +29,15 @@ indexes = np.loadtxt('%s%s/analysis/BH_IDs.txt'%(DataFolder,Simulation))[:,[0,1]
 os.system('mkdir %s%s/analysis/spins'%(DataFolder,Simulation))
 
 for i in xrange(N_proc):
-    print 'In file', i
+    print 'In file', i    
     #Loading data
     str_cmd = "sed 's/^[^=]*=/=/' %s%s/output/blackhole_details/blackhole_spin_%d.txt | cut -c 2- > tmp.txt"%(DataFolder,Simulation,i)
     os.system(str_cmd)
-    data = np.loadtxt('tmp.txt')
-    os.system('rm tmp.txt')
+    #Double check
+    str_cmd = "sed 's/^[^=]*=/=/' tmp.txt| sed 's/=//' > tmp2.txt"
+    os.system(str_cmd)
+    data = np.loadtxt('tmp2.txt')
+    os.system('rm tmp.txt tmp2.txt')
     
     for i_fl, i_bh in zip(indexes[:,0].astype(int),indexes[:,1].astype(int)):
         #Saving current BH
